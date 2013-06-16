@@ -32,5 +32,8 @@ $ ./remote_transmission_indicator.py
 
 For an automatic start after login, use Ubuntu's __Startup Application__ (via Dash)
 
+##Settings
+
+Just edit the first few lines of the source code to suit your needs.
 
 ###Tested on Ubuntu 13.04 with Transmission 2.71
