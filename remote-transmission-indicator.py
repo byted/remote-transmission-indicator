@@ -106,7 +106,8 @@ class RemoteTransmission:
 			self.connection_error()
 		
 	def check_transmission(self):
-		try:			
+		try:
+			self.s = self.c.get_session()			
 			# get specific torrent infos
 			down, up, active, error = 0, 0, 0, 0
 			for t in self.c.get_torrents():
