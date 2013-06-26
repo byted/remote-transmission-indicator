@@ -7,15 +7,15 @@ It's written in Python and uses the __transmissionrpc__ library ( https://bitbuc
 ##Features
 
 * shows:
-  * up- and download speed
-  * number of active torrents
-  * number of torrents with errors
-  * turtle mode enabled or not
+    * up- and download speed
+    * number of active torrents
+    * number of torrents with errors
+    * turtle mode enabled or not
 * start __Transmission remote GUI__ by clicking on either _Errors_ or _Active_
 * toggle turtle mode by clicking on _Turtle Mode_
 * two different display style:
-  * inline => show speed in show speed info in status bar
-  * symbol => show only a symbol in status bar
+    * inline => show speed in show speed info in status bar
+    * symbol => show only a symbol in status bar
 
 ##Install
 
