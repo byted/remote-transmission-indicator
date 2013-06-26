@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
 import sys
+import time
+import logging
 import os
 import gtk
 import appindicator
@@ -25,7 +27,11 @@ OPEN_TRG = True
 # Symbols for Up- and Download
 UP_SYMBOL = u"\u2191"
 DOWN_SYMBOL = u"\u2193"
+##
+# Time between reconnect attempts
+RECONNECT_BACKOFF_TIME = 60
 
+logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%d.%m.%Y - %H:%M:%S: ')
 
 class RemoteTransmission:
 	def __init__(self):
@@ -37,6 +43,15 @@ class RemoteTransmission:
 		
 		self.menu_setup()
 		self.indicator.set_menu(self.menu)
+		
+		self.time_since_disconnect = 0
+		
+		try:
+			self.connect()
+			self.s = self.c.get_session()
+		except:
+			self.connection_error()
+		
 	
 	def menu_setup(self):
 		self.menu = gtk.Menu()
@@ -63,6 +78,11 @@ class RemoteTransmission:
 		if OPEN_TRG: self.error_item.connect("activate", self.openTRG)
 		self.menu.prepend(self.error_item)
 		
+		# Connection Error Item
+		self.connection_error_item = gtk.MenuItem("Connection Error")
+		self.connection_error_item.connect("activate", self.force_reconnect)
+		self.menu.prepend(self.connection_error_item)
+		
 		# Status Item
 		self.torrent_status_item = gtk.MenuItem("n/a")
 		if OPEN_TRG: self.torrent_status_item.connect("activate", self.openTRG)
@@ -78,12 +98,6 @@ class RemoteTransmission:
 			self.up_speed_item = gtk.MenuItem("U: n/a")
 			self.up_speed_item.show()
 			self.menu.prepend(self.up_speed_item)
-		
-		try:
-			self.c = self.connect()
-			self.s = self.c.get_session()
-		except:
-			self.connection_error()
 		
 
 
@@ -104,6 +118,9 @@ class RemoteTransmission:
 			else: self.c.set_session(alt_speed_enabled=True)
 		except:
 			self.connection_error()
+			
+	def force_reconnect(self, widget):
+		self.connect
 		
 	def check_transmission(self):
 		try:
@@ -128,17 +145,38 @@ class RemoteTransmission:
 
 	def connect(self):
 		try:
-			return transmissionrpc.Client(HOST, PORT, USER, PASSWORD)
+			self.c = transmissionrpc.Client(HOST, PORT, USER, PASSWORD)
+			self.time_since_disconnect = 0
+			logging.info("We're connected to remote Transmission on %s:%s", HOST, PORT)
 		except:
 			raise Exception("Can't connect to remote Transmission Client")
 		return True
 		
 		
 	def connection_error(self):
+		if self.time_since_disconnect == 0:	self.time_since_disconnect = time.time()
+		
 		self.show_speed("n/a", "n/a")
-		self.torrent_status_item.set_label("Connection Error")
+		self.connection_error_item.show()
 		self.turtle_item.hide()
 		self.error_item.hide()
+		self.torrent_status_item.hide()
+		logging.warning("Connection to remote Transmission lost. Trying to reconnect...")
+		self.reconnect()
+				
+	def reconnect(self):
+		connected = False
+		while not connected:
+			duration = str(int((time.time() - self.time_since_disconnect) / 60))
+			self.connection_error_item.set_label("Connection lost " + duration + " min ago")
+			time.sleep(RECONNECT_BACKOFF_TIME)		
+			try:
+				self.connect()
+				connected = True
+				logging.warning("...we're back up'")
+			except:
+				logging.warning("...no connection yet...")
+		
 
 	# methods for updating gui elements		
 	def show_errors(self, cnt):
@@ -165,4 +203,3 @@ class RemoteTransmission:
 if __name__ == "__main__":
 	indicator = RemoteTransmission()
 	indicator.main()			
-
