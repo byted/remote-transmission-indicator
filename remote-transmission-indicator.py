@@ -24,9 +24,10 @@ PING_FREQUENCY = 5
 # Active MenuItem opens 'Transmission remote GUI'
 OPEN_TRG = True
 ##
-# Symbols for Up- and Download
+# Several symbols
 UP_SYMBOL = u"\u2191"
 DOWN_SYMBOL = u"\u2193"
+TURTLE_MODE_SYMBOL = u"\u231B"
 ##
 # Time between reconnect attempts
 RECONNECT_BACKOFF_TIME = 60
@@ -190,15 +191,17 @@ class RemoteTransmission:
 		
 	def show_speed(self, down, up):
 		if not INLINE:		
-			self.down_speed_item.set_label(DOWN_SYMBOL+" "+str(down)+" KB/s")
-			self.up_speed_item.set_label(UP_SYMBOL+" "+str(up)+" KB/s")			
+			self.down_speed_item.set_label(DOWN_SYMBOL+str(down)+" KB/s")
+			self.up_speed_item.set_label(UP_SYMBOL+str(up)+" KB/s")			
 		else:
-			self.indicator.set_label(DOWN_SYMBOL+" "+str(down)+u" KB/s - "+UP_SYMBOL+" "+str(up)+" KB/s")
+			self.indicator.set_label(DOWN_SYMBOL+str(down)+u" KB/s - "+UP_SYMBOL+str(up)+" KB/s")
 	
 	def show_turtle(self, is_activated):
-		if is_activated: self.turtle_item.set_label("Turtle Mode: ON")
-		else: self.turtle_item.set_label("Turtle Mode: OFF")
-		
+		if not INLINE:
+			if is_activated: self.turtle_item.set_label("Turtle Mode: ON")
+			else: self.turtle_item.set_label("Turtle Mode: OFF")
+		else:
+			if is_activated: self.indicator.set_label(TURTLE_MODE_SYMBOL + self.indicator.get_label())
 	
 if __name__ == "__main__":
 	indicator = RemoteTransmission()
