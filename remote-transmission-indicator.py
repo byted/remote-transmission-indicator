@@ -13,11 +13,6 @@ PASSWORD = ''
 HOST = ''
 PORT = ''
 ##
-# INLINE: Display mode
-# 1 -> inline: show speed info in status bar
-# 0 -> symbol: show only a symbol in status bar
-INLINE = 1
-##
 # Refresh rate in seconds
 PING_FREQUENCY = 5
 ##
@@ -32,27 +27,35 @@ TURTLE_MODE_SYMBOL = u"\u231B"
 # Time between reconnect attempts
 RECONNECT_BACKOFF_TIME = 60
 
-logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%d.%m.%Y - %H:%M:%S: ')
+logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%d.%m.%Y - %H:%M:%S: ', level = logging.DEBUG)
 
 class RemoteTransmission:
 	def __init__(self):
-		if INLINE: icon = ""
-		else: icon = "transmission-tray-icon"
+		#values to draw
+		self.up = -1
+		self.down = -1
+		self.active_torrents = -1
+		self.nbr_of_torrents = -1
+		self.nbr_of_errors = -1
+		self.turtle_mode_active = False
 		#create indicator
-		self.indicator = appindicator.Indicator("remote-transmission-applet", icon, appindicator.CATEGORY_APPLICATION_STATUS)
+		self.indicator = appindicator.Indicator("remote-transmission-applet", "",  appindicator.CATEGORY_APPLICATION_STATUS)
 		self.indicator.set_status(appindicator.STATUS_ACTIVE)
 		
 		self.menu_setup()
 		self.indicator.set_menu(self.menu)
 		
-		self.time_since_disconnect = 0
+		self.time_of_disconnect = 0
+		self.connected = False
+		self.first_run = True
+		self.connection_error_shown = True
 		
 		try:
 			self.connect()
 			self.s = self.c.get_session()
 		except:
-			self.connection_error()
-		
+			self.set_error_mode()
+
 	
 	def menu_setup(self):
 		self.menu = gtk.Menu()
@@ -68,62 +71,51 @@ class RemoteTransmission:
 		self.seperator.show()
 		self.menu.prepend(self.seperator)
 		
-		# Turtle Item
-		self.turtle_item = gtk.MenuItem("Turtle Mode: n/a")
-		if OPEN_TRG: self.turtle_item.connect("activate", self.toggle_turtle)
-		self.turtle_item.show()
-		self.menu.prepend(self.turtle_item)
-		
 		# Error Item
 		self.error_item = gtk.MenuItem("no errors")
 		if OPEN_TRG: self.error_item.connect("activate", self.openTRG)
 		self.menu.prepend(self.error_item)
 		
-		# Connection Error Item
-		self.connection_error_item = gtk.MenuItem("Connection Error")
-		self.connection_error_item.connect("activate", self.force_reconnect)
-		self.menu.prepend(self.connection_error_item)
-		
 		# Status Item
 		self.torrent_status_item = gtk.MenuItem("n/a")
 		if OPEN_TRG: self.torrent_status_item.connect("activate", self.openTRG)
-		self.torrent_status_item.show()
 		self.menu.prepend(self.torrent_status_item)
-		
-		# Speed Items
-		if not INLINE:
-			self.down_speed_item = gtk.MenuItem("D: n/a")
-			self.down_speed_item.show()
-			self.menu.prepend(self.down_speed_item)
-		
-			self.up_speed_item = gtk.MenuItem("U: n/a")
-			self.up_speed_item.show()
-			self.menu.prepend(self.up_speed_item)
-		
+
+		# Turtle Item
+		self.turtle_item = gtk.MenuItem("Toogle Turtle Mode")
+		self.turtle_item.connect("activate", self.toggle_turtle)
+		self.menu.prepend(self.turtle_item)
 
 
 	def main(self):
 		self.check_transmission()
 		gtk.timeout_add(PING_FREQUENCY * 1000, self.check_transmission)
-		gtk.main()	#let it recusively call itself
+		gtk.main()	#let it recursively call itself
 	
 	def quit(self, widget):
 		sys.exit(0)
-		
-	def openTRG(self, widget):
-		os.system("transgui")
-	
-	def toggle_turtle(self, widget):
-		try:
-			if self.s.alt_speed_enabled: self.c.set_session(alt_speed_enabled=False)
-			else: self.c.set_session(alt_speed_enabled=True)
-		except:
-			self.connection_error()
-			
-	def force_reconnect(self, widget):
-		self.connect
-		
+
+	def refresh_indicator(self):
+		if self.connected:
+			self.show_speed_and_mode(self.down, self.up, self.turtle_mode_active)	
+			self.show_active(self.active_torrents, self.nbr_of_torrents)
+			self.show_errors(self.nbr_of_errors)
+
+		else:
+			self.indicator.set_label("No Transmission connection!")
+
+		logging.info("Indicator redrawn")
+
+
 	def check_transmission(self):
+		if self.first_run: 
+			self.connect()
+			self.refresh_indicator()
+			self.first_run = False
+			return True
+
+		if not self.connected and self.connection_error_shown: self.reconnect_loop()
+
 		try:
 			self.s = self.c.get_session()			
 			# get specific torrent infos
@@ -133,75 +125,81 @@ class RemoteTransmission:
 				up += (t.rateUpload / 1024)
 				if t.status in ("seeding","downloading"):	active += 1
 				if t.error > 1: error += 1
-
-			self.show_speed(down, up)	
-			self.show_active(active, self.c.get_torrents())
-			self.show_errors(error)
-			self.show_turtle(self.s.alt_speed_enabled)
+			self.up = up
+			self.down = down
+			self.nbr_of_errors = error
+			self.active_torrents = active
+			self.nbr_of_torrents = len(self.c.get_torrents())
+			self.turtle_mode_active = self.s.alt_speed_enabled
+			logging.info("Info updated")
 		except:
-			self.connection_error()
-		finally:
-			return True
-		
+			if not self.connected: self.connection_error_shown = True
+			self.set_error_mode();
 
+		self.refresh_indicator()
+
+		return True
+
+	def openTRG(self, widget):
+		os.system("transgui")
+
+	#
+	# connection methods		
+	#
 	def connect(self):
 		try:
 			self.c = transmissionrpc.Client(HOST, PORT, USER, PASSWORD)
-			self.time_since_disconnect = 0
+			self.set_working_mode()
 			logging.info("We're connected to remote Transmission on %s:%s", HOST, PORT)
 		except:
-			raise Exception("Can't connect to remote Transmission Client")
-		return True
-		
-		
-	def connection_error(self):
-		if self.time_since_disconnect == 0:	self.time_since_disconnect = time.time()
-		
-		self.show_speed("n/a", "n/a")
-		self.connection_error_item.show()
-		self.turtle_item.hide()
-		self.error_item.hide()
-		self.torrent_status_item.hide()
-		logging.warning("Connection to remote Transmission lost. Trying to reconnect...")
-		self.reconnect()
-				
-	def reconnect(self):
-		connected = False
-		while not connected:
-			duration = str(int((time.time() - self.time_since_disconnect) / 60))
-			self.connection_error_item.set_label("Connection lost " + duration + " min ago")
-			time.sleep(RECONNECT_BACKOFF_TIME)		
-			try:
-				self.connect()
-				connected = True
-				logging.warning("...we're back up'")
-			except:
-				logging.warning("...no connection yet...")
-		
+			logging.warning("Can't connect to remote Transmission!")
 
-	# methods for updating gui elements		
+	def reconnect_loop(self):
+		while not self.connected:
+			time.sleep(RECONNECT_BACKOFF_TIME)		
+			self.connect()
+
+	#
+	# helper
+	#
 	def show_errors(self, cnt):
 		if cnt > 0: 
 			self.error_item.set_label("Errors: "+str(cnt))
 			self.error_item.show()
 		else: self.error_item.hide()
 		
+	def toggle_turtle(self, widget):
+		try:
+			if self.s.alt_speed_enabled: self.c.set_session(alt_speed_enabled=False)
+			else: self.c.set_session(alt_speed_enabled=True)
+		except:
+			self.connection_error()
+
 	def show_active(self, active, all_torrents):
-		self.torrent_status_item.set_label("Active: "+str(active)+"/"+str(len(all_torrents)))
+		self.torrent_status_item.set_label("Active: "+str(active)+"/"+str(all_torrents))
 		
-	def show_speed(self, down, up):
-		if not INLINE:		
-			self.down_speed_item.set_label(DOWN_SYMBOL+str(down)+" KB/s")
-			self.up_speed_item.set_label(UP_SYMBOL+str(up)+" KB/s")			
-		else:
-			self.indicator.set_label(DOWN_SYMBOL+str(down)+u" KB/s - "+UP_SYMBOL+str(up)+" KB/s")
-	
-	def show_turtle(self, is_activated):
-		if not INLINE:
-			if is_activated: self.turtle_item.set_label("Turtle Mode: ON")
-			else: self.turtle_item.set_label("Turtle Mode: OFF")
-		else:
-			if is_activated: self.indicator.set_label(TURTLE_MODE_SYMBOL + self.indicator.get_label())
+	def show_speed_and_mode(self, down, up, turtle_mode_active):
+		turtle_sym = ""
+		if turtle_mode_active: turtle_sym = TURTLE_MODE_SYMBOL
+		self.indicator.set_label(turtle_sym + DOWN_SYMBOL+str(down)+u" KB/s - "+UP_SYMBOL+str(up)+" KB/s")
+
+	def set_error_mode(self):
+		if self.time_of_disconnect == 0:	self.time_of_disconnect = time.time()
+		self.connected = False
+		self.torrent_status_item.hide()
+		self.error_item.hide()
+		self.connection_error_item.show()
+		logging.warning("Connection to remote Transmission lost")
+
+	def set_working_mode(self):
+		self.connected = True
+		self.time_of_disconnect = 0
+		self.connection_error_shown = False
+		self.connection_error_item.hide()
+		self.torrent_status_item.show()
+		self.error_item.show()
+		self.turtle_item.show()
+
 	
 if __name__ == "__main__":
 	indicator = RemoteTransmission()
