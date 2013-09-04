@@ -27,10 +27,13 @@ TURTLE_MODE_SYMBOL = u"\u231B"
 # Time between reconnect attempts
 RECONNECT_BACKOFF_TIME = 60
 
-logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%d.%m.%Y - %H:%M:%S: ', level = logging.DEBUG)
+logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%d.%m.%Y - %H:%M:%S: ')#, level = logging.DEBUG)
 
 class RemoteTransmission:
 	def __init__(self):
+		try: self.c = transmissionrpc.Client(HOST, PORT, USER, PASSWORD)
+		except: self.c = none
+
 		#values to draw
 		self.up = -1
 		self.down = -1
@@ -45,16 +48,9 @@ class RemoteTransmission:
 		self.menu_setup()
 		self.indicator.set_menu(self.menu)
 		
-		self.time_of_disconnect = 0
 		self.connected = False
 		self.first_run = True
 		self.connection_error_shown = True
-		
-		try:
-			self.connect()
-			self.s = self.c.get_session()
-		except:
-			self.set_error_mode()
 
 	
 	def menu_setup(self):
@@ -108,13 +104,8 @@ class RemoteTransmission:
 
 
 	def check_transmission(self):
-		if self.first_run: 
-			self.connect()
-			self.refresh_indicator()
-			self.first_run = False
-			return True
 
-		if not self.connected and self.connection_error_shown: self.reconnect_loop()
+		if not self.connected and self.connection_error_shown and not self.first_run: self.reconnect_loop()
 
 		try:
 			self.s = self.c.get_session()			
@@ -132,12 +123,15 @@ class RemoteTransmission:
 			self.nbr_of_torrents = len(self.c.get_torrents())
 			self.turtle_mode_active = self.s.alt_speed_enabled
 			logging.info("Info updated")
+			if self.first_run: 
+				self.set_working_mode()
+				self.first_run = False
+
 		except:
 			if not self.connected: self.connection_error_shown = True
-			self.set_error_mode();
+			self.set_error_mode();			
 
 		self.refresh_indicator()
-
 		return True
 
 	def openTRG(self, widget):
@@ -184,18 +178,14 @@ class RemoteTransmission:
 		self.indicator.set_label(turtle_sym + DOWN_SYMBOL+str(down)+u" KB/s - "+UP_SYMBOL+str(up)+" KB/s")
 
 	def set_error_mode(self):
-		if self.time_of_disconnect == 0:	self.time_of_disconnect = time.time()
 		self.connected = False
 		self.torrent_status_item.hide()
 		self.error_item.hide()
-		self.connection_error_item.show()
 		logging.warning("Connection to remote Transmission lost")
 
 	def set_working_mode(self):
 		self.connected = True
-		self.time_of_disconnect = 0
 		self.connection_error_shown = False
-		self.connection_error_item.hide()
 		self.torrent_status_item.show()
 		self.error_item.show()
 		self.turtle_item.show()
