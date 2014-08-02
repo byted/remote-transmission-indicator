@@ -36,4 +36,4 @@ For an automatic start after login, use Ubuntu's __Startup Application__ (via Da
 
 Just edit the first few lines of the source code to suit your needs.
 
-###Tested on Ubuntu 13.04 with Transmission 2.71
+###Tested on Ubuntu 13.04/13.10/14.04 with Transmission 2.71
