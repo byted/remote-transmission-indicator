@@ -42,7 +42,7 @@ class RemoteTransmission:
 		self.nbr_of_errors = -1
 		self.turtle_mode_active = False
 		#create indicator
-		self.indicator = appindicator.Indicator("remote-transmission-applet", "",  appindicator.CATEGORY_APPLICATION_STATUS)
+		self.indicator = appindicator.Indicator("remote-transmission-applet", "transmission-tray-icon",  appindicator.CATEGORY_APPLICATION_STATUS)
 		self.indicator.set_status(appindicator.STATUS_ACTIVE)
 		
 		self.menu_setup()
@@ -89,7 +89,7 @@ class RemoteTransmission:
 		gtk.main()	#let it recursively call itself
 	
 	def quit(self, widget):
-		sys.exit(0)
+		gtk.main_quit()
 
 	def refresh_indicator(self):
 		if self.connected:
